@@ -24,3 +24,7 @@ type OrderProducer interface {
 type OrderOrchestratorTransaction interface {
 	ExecuteWorkflowCreateOrder(workflowDefinition *workflow.WorkflowDefinition) error
 }
+
+type Worker interface {
+	Execute(func() error) error
+}

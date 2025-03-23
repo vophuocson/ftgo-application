@@ -5,6 +5,9 @@ import (
 	"delivery-food/order/internal/core/port"
 	"delivery-food/order/internal/core/port/dto"
 	"delivery-food/order/internal/core/port/workflow"
+	"delivery-food/order/internal/core/service/command"
+	"delivery-food/order/internal/core/service/orchestrator"
+	"delivery-food/order/internal/core/service/receiver"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -22,16 +25,37 @@ func NewOrderService(repo port.OrderRepository, p port.OrderProducer, c port.Ord
 }
 
 func (oS *orderService) CreateOrder(order *order.Order) error {
-	err := oS.repo.Create(order)
-	if err != nil {
-		return errors.Wrap(err, "CreateOrder(order *order.Order)")
-	}
-	workflowD := oS.createOrderWorkflowDefinition(order)
-	err = oS.orchestrator.ExecuteWorkflowCreateOrder(workflowD)
+	receiver := receiver.NewOrderCreation(order, oS.repo, oS.p, oS.c)
+	saga := orchestrator.Orchestrator{}
+	err := saga.Execute(&command.OrderCreationCommand{Receiver: &receiver})
 	if err != nil {
 		return err
 	}
-	return err
+	err = saga.Execute(&command.ConsumerVerificationCommand{Receiver: &receiver})
+	if err != nil {
+		return err
+	}
+	err = saga.Execute(&command.TicketCreationCommand{Receiver: &receiver})
+	if err != nil {
+		return err
+	}
+	err = saga.Execute(&command.CardAuthenticationCommand{Receiver: &receiver})
+	if err != nil {
+		return err
+	}
+	err = saga.Execute(&command.OrderVerificationCommand{Receiver: &receiver})
+	if err != nil {
+		return err
+	}
+	err = saga.Execute(&command.TicketApprovalCommand{Receiver: &receiver})
+	if err != nil {
+		return err
+	}
+	err = saga.Execute(&command.OrderApprovalCommand{Receiver: &receiver})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (oS *orderService) FindOrderByID(id uuid.UUID) (*order.Order, error) {
@@ -79,4 +103,34 @@ func (oS *orderService) createOrderWorkflowDefinition(o *order.Order) *workflow.
 	})
 	workflowDefinition.Steps = append(workflowDefinition.Steps, &approveOrderCreationActivity)
 	return &workflowDefinition
+}
+
+//  order có data rồi
+// define command
+// order service đóng vai trò là invoker
+// receiver là ai
+// command là ai
+
+type OrderCreateSaga struct {
+	Order order.Order
+}
+
+// defines funcs for create order
+
+type Command interface {
+	Execute()
+	Compensate()
+}
+type OrderCreate struct {
+	Order order.Order
+	repo  port.OrderRepository
+	p     port.OrderProducer
+	c     port.OrderConsumer
+}
+
+func (o *OrderCreate) Execute() {
+}
+
+func (o *OrderCreate) Compensate() {
+
 }
