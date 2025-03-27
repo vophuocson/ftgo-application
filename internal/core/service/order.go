@@ -3,11 +3,9 @@ package service
 import (
 	order "delivery-food/order/internal/core/domain"
 	"delivery-food/order/internal/core/port"
-	"delivery-food/order/internal/core/port/dto"
-	"delivery-food/order/internal/core/port/workflow"
 	"delivery-food/order/internal/core/service/command"
 	"delivery-food/order/internal/core/service/orchestrator"
-	"delivery-food/order/internal/core/service/receiver"
+	ordercreation "delivery-food/order/internal/core/service/receiver/order-creation"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -25,33 +23,33 @@ func NewOrderService(repo port.OrderRepository, p port.OrderProducer, c port.Ord
 }
 
 func (oS *orderService) CreateOrder(order *order.Order) error {
-	receiver := receiver.NewOrderCreation(order, oS.repo, oS.p, oS.c)
+	creationFactory := ordercreation.CreateStandardOrderProcessFactory(order, oS.repo, oS.p, oS.c)
 	saga := orchestrator.Orchestrator{}
-	err := saga.Execute(&command.OrderCreationCommand{Receiver: &receiver})
+	err := saga.Execute(&command.OrderCreationCommand{Receiver: creationFactory.CreateOrderCreation()})
 	if err != nil {
 		return err
 	}
-	err = saga.Execute(&command.ConsumerVerificationCommand{Receiver: &receiver})
+	err = saga.Execute(&command.ConsumerVerificationCommand{Receiver: creationFactory.CreateConsumerVerification()})
 	if err != nil {
 		return err
 	}
-	err = saga.Execute(&command.TicketCreationCommand{Receiver: &receiver})
+	err = saga.Execute(&command.TicketCreationCommand{Receiver: creationFactory.CreateTicketCreation()})
 	if err != nil {
 		return err
 	}
-	err = saga.Execute(&command.CardAuthenticationCommand{Receiver: &receiver})
+	err = saga.Execute(&command.CardAuthenticationCommand{Receiver: creationFactory.CreateCardAuthentication()})
 	if err != nil {
 		return err
 	}
-	err = saga.Execute(&command.OrderVerificationCommand{Receiver: &receiver})
+	err = saga.Execute(&command.OrderVerificationCommand{Receiver: creationFactory.CreateOrderVerification()})
 	if err != nil {
 		return err
 	}
-	err = saga.Execute(&command.TicketApprovalCommand{Receiver: &receiver})
+	err = saga.Execute(&command.TicketApprovalCommand{Receiver: creationFactory.CreateTicketApproval()})
 	if err != nil {
 		return err
 	}
-	err = saga.Execute(&command.OrderApprovalCommand{Receiver: &receiver})
+	err = saga.Execute(&command.OrderApprovalCommand{Receiver: creationFactory.CreateOrderApproval()})
 	if err != nil {
 		return err
 	}
@@ -64,73 +62,4 @@ func (oS *orderService) FindOrderByID(id uuid.UUID) (*order.Order, error) {
 		return nil, errors.Wrap(err, "FindOrderByID(id uuid.UUID)")
 	}
 	return order, nil
-}
-
-func (oS *orderService) createOrderWorkflowDefinition(o *order.Order) *workflow.WorkflowDefinition {
-	var workflowDefinition workflow.WorkflowDefinition
-	var compensateTransaction workflow.Activity
-	compensateTransaction.AddStep(&workflow.Step{
-		Command: func() error { return oS.p.VerifyConsumer(o) },
-	})
-	compensateTransaction.AddStep(&workflow.Step{
-		Command:        func() error { return oS.p.CreateTicket(o) },
-		CompensateFunc: func() error { return oS.p.CompensateTicket(o) },
-	})
-	compensateTransaction.AddStep(&workflow.Step{
-		Command: func() error { return oS.p.AuthenticateCard(o) },
-	})
-	workflowDefinition.Steps = append(workflowDefinition.Steps, &compensateTransaction)
-	var confirmOrderCreationActivity workflow.Activity
-	confirmOrderCreationActivity.AddStep(&workflow.Step{
-		Command: func() error {
-			return oS.c.ConfirmOrderCreation(&dto.ConfirmCreateOrder{
-				OrderID: o.ID,
-				ChannelNamesReply: map[string]bool{
-					"order-service.kitchen.create.dev.v1":       false,
-					"order-service.customer.verify.dev.v1":      false,
-					"order-service.payment.authenticate.dev.v1": false,
-				},
-			})
-		},
-	})
-	workflowDefinition.Steps = append(workflowDefinition.Steps, &confirmOrderCreationActivity)
-	var approveOrderCreationActivity workflow.Activity
-	approveOrderCreationActivity.AddStep(&workflow.Step{
-		Command: func() error { return oS.p.ApproveTicketCreation(o) },
-	})
-	approveOrderCreationActivity.AddStep(&workflow.Step{
-		Command: func() error { return oS.p.ApproveOrderCreation(o) },
-	})
-	workflowDefinition.Steps = append(workflowDefinition.Steps, &approveOrderCreationActivity)
-	return &workflowDefinition
-}
-
-//  order có data rồi
-// define command
-// order service đóng vai trò là invoker
-// receiver là ai
-// command là ai
-
-type OrderCreateSaga struct {
-	Order order.Order
-}
-
-// defines funcs for create order
-
-type Command interface {
-	Execute()
-	Compensate()
-}
-type OrderCreate struct {
-	Order order.Order
-	repo  port.OrderRepository
-	p     port.OrderProducer
-	c     port.OrderConsumer
-}
-
-func (o *OrderCreate) Execute() {
-}
-
-func (o *OrderCreate) Compensate() {
-
 }

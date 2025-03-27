@@ -1,13 +1,15 @@
 package command
 
-import "delivery-food/order/internal/core/service/receiver"
+import (
+	"delivery-food/order/internal/core/service/receiver/common"
+)
 
 type OrderCreationCommand struct {
-	Receiver *receiver.OrderCreation
+	Receiver common.AbsTractCreation
 }
 
 func (c *OrderCreationCommand) Execute() error {
-	return c.Receiver.CreateOrder()
+	return c.Receiver.Create()
 }
 
 func (c *OrderCreationCommand) Compensate() error {
@@ -15,11 +17,11 @@ func (c *OrderCreationCommand) Compensate() error {
 }
 
 type ConsumerVerificationCommand struct {
-	Receiver *receiver.OrderCreation
+	Receiver common.AbsTractVerification
 }
 
 func (c *ConsumerVerificationCommand) Execute() error {
-	return c.Receiver.VerifyConsumer()
+	return c.Receiver.Verify()
 }
 
 func (c *ConsumerVerificationCommand) Compensate() error {
@@ -27,23 +29,23 @@ func (c *ConsumerVerificationCommand) Compensate() error {
 }
 
 type TicketCreationCommand struct {
-	Receiver *receiver.OrderCreation
+	Receiver common.AbsTractCreation
 }
 
 func (c *TicketCreationCommand) Execute() error {
-	return c.Receiver.CreateTicket()
+	return c.Receiver.Create()
 }
 
 func (c *TicketCreationCommand) Compensate() error {
-	return c.Receiver.CompensateTicket()
+	return c.Receiver.Compensate()
 }
 
 type CardAuthenticationCommand struct {
-	Receiver *receiver.OrderCreation
+	Receiver common.AbsTractVerification
 }
 
 func (c *CardAuthenticationCommand) Execute() error {
-	return c.Receiver.AuthenticateCard()
+	return c.Receiver.Verify()
 }
 
 func (c *CardAuthenticationCommand) Compensate() error {
@@ -51,7 +53,7 @@ func (c *CardAuthenticationCommand) Compensate() error {
 }
 
 type OrderVerificationCommand struct {
-	Receiver *receiver.OrderCreation
+	Receiver common.AbsTractVerification
 }
 
 func (c *OrderVerificationCommand) Execute() error {
@@ -63,11 +65,11 @@ func (c *OrderVerificationCommand) Compensate() error {
 }
 
 type TicketApprovalCommand struct {
-	Receiver *receiver.OrderCreation
+	Receiver common.AbstractApproval
 }
 
 func (c *TicketApprovalCommand) Execute() error {
-	return c.Receiver.ApproveTicket()
+	return c.Receiver.Approve()
 }
 
 func (c *TicketApprovalCommand) Compensate() error {
@@ -75,11 +77,11 @@ func (c *TicketApprovalCommand) Compensate() error {
 }
 
 type OrderApprovalCommand struct {
-	Receiver *receiver.OrderCreation
+	Receiver common.AbstractApproval
 }
 
 func (c *OrderApprovalCommand) Execute() error {
-	return c.Receiver.ApproveOrder()
+	return c.Receiver.Approve()
 }
 
 func (c *OrderApprovalCommand) Compensate() error {
